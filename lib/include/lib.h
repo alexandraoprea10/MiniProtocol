@@ -24,6 +24,8 @@ struct connection {
     struct sockaddr_in servaddr; /* used to identify the destination */
     pthread_mutex_t con_lock; /* Used for syncronization with the handler thread and read/send calls.*/
     pthread_cond_t wait_data;
+    pthread_cond_t wait_to_send;
+    
     /* TODO. Parameters used only by the sender */
     int max_window_seq; /* Used to store the max number of packets that can be inflight, since we can
                            have many more packets in our window */

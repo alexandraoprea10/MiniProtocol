@@ -147,7 +147,7 @@ int wait4connect(uint32_t ip, uint16_t port)
     /* Receive SYN on the connection socket. Create a new socket and bind it to
      * the chosen port. Send the data port number via SYN-ACK to the client */
     con->sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    int buffer = 512 * 512;
+    int buffer = 1024 * 1024;
     setsockopt(con->sockfd, SOL_SOCKET, SO_RCVBUF, &buffer, sizeof(buffer));
     
     struct sockaddr_in resp;

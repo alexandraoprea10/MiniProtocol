@@ -21,20 +21,24 @@ struct pollfd data_fds[MAX_CONNECTIONS];
 struct pollfd timer_fds[MAX_CONNECTIONS];
 int fdmax = 0;
 
-int nr_ferestre = 50;
+int nr_ferestre = 600;
 
 int send_data(int conn_id, char *buffer, int len)
 {
     struct connection *current_connection = cons[conn_id];
     int ferestre_curente = 0;
     while (1) {
-        pthread_mutex_lock(&cons[conn_id]->con_lock);
+        pthread_mutex_lock(&current_connection->con_lock);
         if (current_connection->next_to_send - current_connection->base < nr_ferestre) {
             break;
         }
-        pthread_mutex_unlock(&cons[conn_id]->con_lock);
+        pthread_mutex_unlock(&current_connection->con_lock);
         ferestre_curente++;
-        usleep(1000);
+        if (ferestre_curente > 800) {
+            pthread_mutex_lock(&current_connection->con_lock);
+            break;
+        }
+        usleep(100);
     }
 
     /* We will write code here as to not have sync problems with sender_handler */
@@ -72,7 +76,7 @@ void *sender_handler(void *arg)
         int conn_id = -1;
         do {
             res = recv_message_or_timeout(buf, MAX_SEGMENT_SIZE, &conn_id);
-            if (res == -14 || res == -1) {
+            if (res == -1 || res == -14) {
                 auto again = cons.find(0);
                 if (again != cons.end()) {
                     struct connection *current_connection = again->second;
@@ -134,7 +138,7 @@ int setup_connection(uint32_t ip, uint16_t port)
     int conn_id = 0;
     con->sockfd = socket(AF_INET, SOCK_DGRAM, 0);
 
-    int buffer = 512 * 512;
+    int buffer = 1024 * 1024;
     setsockopt(con->sockfd, SOL_SOCKET, SO_SNDBUF, &buffer, sizeof(buffer));
     setsockopt(con->sockfd, SOL_SOCKET, SO_RCVBUF, &buffer, sizeof(buffer));
 
@@ -181,9 +185,9 @@ int setup_connection(uint32_t ip, uint16_t port)
     timer_fds[fdmax].events = POLLIN;    
     struct itimerspec spec;     
     spec.it_value.tv_sec = 0;
-    spec.it_value.tv_nsec = 10000000;    
+    spec.it_value.tv_nsec = 45000000;    
     spec.it_interval.tv_sec = 0;
-    spec.it_interval.tv_nsec = 10000000;    
+    spec.it_interval.tv_nsec = 45000000;    
     timerfd_settime(timer_fds[fdmax].fd, 0, &spec, NULL);    
     fdmax++;
 
