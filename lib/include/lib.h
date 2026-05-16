@@ -4,6 +4,8 @@
 #include <cstdint>
 #include "utils.h"
 #include <arpa/inet.h>
+#include <vector>
+#include <map>
 
 /* Maximum segment size, change as you see fit */
 #define MAX_DATA_SIZE 512
@@ -21,12 +23,20 @@ struct connection {
     int conn_id; /* connection identifier */
     struct sockaddr_in servaddr; /* used to identify the destination */
     pthread_mutex_t con_lock; /* Used for syncronization with the handler thread and read/send calls.*/
-
+    pthread_cond_t wait_data;
     /* TODO. Parameters used only by the sender */
     int max_window_seq; /* Used to store the max number of packets that can be inflight, since we can
                            have many more packets in our window */
 
     /* TODO. Parameters used only by the client */
+    int base;
+    int next_to_send;
+    std::map<int, std::vector<char>> sent_packet;
+
+    // Trebuie sa facem si pentru receiver
+    int expected_seq;
+    std::vector<char> packet;
+    std::map<int, std::vector<char>> receive_packet;
 };
 
 /* ########## API that we expose to the application ########### */

@@ -10,7 +10,7 @@
 #include <stdlib.h>
 #include "lib.h"
 
-#define CHUNKSIZE 1024
+#define CHUNKSIZE 512
 
 /* Receives a file path as a parameter and sends it to the server*/
 int main(int argc, char *argv[])
@@ -33,6 +33,7 @@ int main(int argc, char *argv[])
 
     /* Connect to the server */
     struct in_addr addr;
+    // 127.0.0.1 adresa mea
     inet_aton("172.16.0.100", &addr);
     int conn_id = setup_connection(addr.s_addr, htons(8032));
     printf("Connected to server\n");
