@@ -34,7 +34,7 @@ int send_data(int conn_id, char *buffer, int len)
         }
         pthread_mutex_unlock(&current_connection->con_lock);
         ferestre_curente++;
-        if (ferestre_curente > 800) {
+        if (ferestre_curente > 1000) {
             pthread_mutex_lock(&current_connection->con_lock);
             break;
         }
@@ -46,7 +46,7 @@ int send_data(int conn_id, char *buffer, int len)
     header.conn_id = current_connection->conn_id;
     header.len = htons(len);
     header.protocol_id = POLI_PROTOCOL_ID;
-    header.seq_num = htons(current_connection->next_to_send);
+    header.seq_num = htons(current_connection->next_to_send % 65536);
     header.type = 0;
 
     std::vector<char> send_packet(sizeof(header) + len);
@@ -83,12 +83,11 @@ void *sender_handler(void *arg)
                     pthread_mutex_lock(&current_connection->con_lock);
 
                     if (!current_connection->sent_packet.empty()) {
-                        for (int i = current_connection->base; i < current_connection->next_to_send; i++) {
-                            auto idx = current_connection->sent_packet.find(i);
-
-                            if (idx != current_connection->sent_packet.end()) {
-                                sendto(current_connection->sockfd, idx->second.data(), idx->second.size(), 0, (struct sockaddr *)&current_connection->servaddr, sizeof(current_connection->servaddr));
-                            }
+                        auto idx2 = current_connection->sent_packet.begin();
+                        while (idx2 != current_connection->sent_packet.end()) {
+                            const std::vector <char>& packet = idx2->second;
+                            sendto(current_connection->sockfd, packet.data(), packet.size(), 0, (struct sockaddr *)&current_connection->servaddr, sizeof(current_connection->servaddr));
+                            idx2++;
                         }
                     }
                     pthread_mutex_unlock(&current_connection->con_lock);
@@ -104,7 +103,7 @@ void *sender_handler(void *arg)
             continue;
         }
         struct connection *current_connection = idx->second;
-        pthread_mutex_lock(&cons[conn_id]->con_lock);
+        pthread_mutex_lock(&current_connection->con_lock);
 
         /* Handle segment received from the receiver. We use this between locks
         as to not have synchronization issues with the send_data calls which are
@@ -113,16 +112,22 @@ void *sender_handler(void *arg)
             struct poli_tcp_ctrl_hdr *header = (struct poli_tcp_ctrl_hdr*) buf;
             if (header->protocol_id == POLI_PROTOCOL_ID && header->type == 1) {
                 int ack = ntohs(header->ack_num);
-                auto crt = current_connection->sent_packet.begin();
-                while (crt != current_connection->sent_packet.end() && crt->first < ack) {
-                    crt = current_connection->sent_packet.erase(crt);
+                current_connection->sent_packet.erase(ack);
+                int old = current_connection->base;
+                while (current_connection->base < current_connection->next_to_send) {
+                    int idx2 = current_connection->base;
+                    if (current_connection->sent_packet.count(idx2) > 0) {
+                        break;
+                    }
+                    current_connection->base++;
                 }
-                if (ack > current_connection->base) {
-                    current_connection->base = ack;
+                if (current_connection->base == old && ack > current_connection->base) {
+                    const std::vector<char>& packet = current_connection->sent_packet[current_connection->base];
+                    sendto(current_connection->sockfd, packet.data(), packet.size(), 0, (struct sockaddr *)&current_connection->servaddr, sizeof(current_connection->servaddr));
                 }
             }
         }
-        pthread_mutex_unlock(&cons[conn_id]->con_lock);
+        pthread_mutex_unlock(&current_connection->con_lock);
     }
     return NULL;
 }
@@ -185,9 +190,9 @@ int setup_connection(uint32_t ip, uint16_t port)
     timer_fds[fdmax].events = POLLIN;    
     struct itimerspec spec;     
     spec.it_value.tv_sec = 0;
-    spec.it_value.tv_nsec = 45000000;    
+    spec.it_value.tv_nsec = 20000000;    
     spec.it_interval.tv_sec = 0;
-    spec.it_interval.tv_nsec = 45000000;    
+    spec.it_interval.tv_nsec = 20000000;    
     timerfd_settime(timer_fds[fdmax].fd, 0, &spec, NULL);    
     fdmax++;
 

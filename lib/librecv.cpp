@@ -106,7 +106,7 @@ void *receiver_handler(void *arg)
             }
         }
         struct poli_tcp_ctrl_hdr resp;
-        resp.ack_num = htons(current_connection->expected_seq);
+        resp.ack_num = htons((uint16_t) seq);
         resp.protocol_id = POLI_PROTOCOL_ID;
         resp.recv_window = htons(65535);
         resp.type = 1;
@@ -201,6 +201,9 @@ void init_receiver(int recv_buffer_bytes)
 
     /* TODO: Create the connection socket and bind it to 8031 */
     listenfd = socket(AF_INET, SOCK_DGRAM, 0);
+
+    int buffer = 1024 * 1024;
+    setsockopt(listenfd, SOL_SOCKET, SO_RCVBUF, &buffer, sizeof(buffer));
 
     struct sockaddr_in client_addr;
     client_addr.sin_addr.s_addr = htonl(INADDR_ANY);
