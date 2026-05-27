@@ -5,14 +5,15 @@ will implement a protocol over UDP that provides reliable transport.
 Etapa 1 - Protocol
 Am modificat structura connection. Am adaugat:
 Pentru Sender:
-a) base - primul pachet din fereastra glisanta. Il voi folosi la libsend pentru a sti cand trebuie sa 
-trimit urmatorul pachet.
+a) base - retine numarul de secvente din primul pachet din fereastra glisanta. Il voi folosi la libsend 
+pentru a sti cand trebuie sa trimit urmatorul pachet.
 b) next_to_send - contor pentru pachetul urmatorul pe care vreau sa il trimit
-c) sent_packet - retine toate pachetele trimise pana acum
+c) sent_packet - retine toate pachetele trimise pana acum. Cheia este numarul de secventa al pachetului 
+curent, iar valoarea este pachetul curent.
 Pentru receiver:
 d) packet - retine toate pachetele care au venit in ordinea corecta
 e) receive_packet - retine toate pachetele care au venit inainte de nr de secventa asteptat si urmeaza 
-sa fie trimise
+sa fie trimise. Are aceeasi structura ca sent_packet.
 
 
 Etapa 2 - Conexiunea
@@ -36,9 +37,8 @@ daca tipul este 1(adica daca este ACK). Daca nu este, atunci rulam while-ul.
 Etapa 3 - Trimiterea de pachete
 Cerinta sugereaza implementarea cu Selective Repeat, insa eu am facut cu Go Back n, retransmisand toate 
 pachetele daca unul este pierdut. 
-In libsend, iau o variabila globala care imi va contoriza nr de ferestre din fereastra glisanta. I-am pus numarul 
-600. Pentru 150, implementarea era foarte lenta, iar pentru 1000 era prea mult, se suprapuneau pachetele si se 
-bloca. In send_data, verific daca trimit prea repede pachetele. De aceea pun la somn conexiunea pentru 150ms. 
+In libsend, iau o variabila globala care imi va contoriza nr de ferestre din fereastra glisanta. In send_data, 
+verific daca trimit prea repede pachetele. De aceea pun la somn conexiunea pentru 150ms. 
 Verific sa nu trec de 1000 de ferestre curente. Daca sunt peste 1000 de ferestre, blochez mutex-ul. In sender_handler
 exista deja un schelet de cod care apeleaza functia recv_message_or_timeout. Aceasta functie returneaza -1 sau -14 
 in caz de eroare. Daca primesc astfel de erori, blochez mutex-ul si parcurg pachetele pe care le-am adaugat in 
@@ -57,3 +57,16 @@ in buffer-ul din argumentele functiei.. In init_receiver initializez socket-ul p
 asculta si maresc buffer-ul pe care trimit. In functia init_receiver initializez socket-ul listenfd si il 
 asociez cu portul dat de tema 8032. Cresc buffer-ul, chiar daca MAX_DATA_SIZE = 512. Fara aceasta marire, nu 
 imi trec testele. Am facut debug si problema era ca nu impartea bine fisierul. Imi ajungea inapoi jumatate de pachet.
+
+Cum am implementat UDP peste API sockets:
+La Sender, am ales sa declar un numar de ferestre implicit. Eu am ales 600. I-am pus numarul 600. Pentru 150, 
+implementarea era foarte lenta, iar pentru 1000 era prea mult, se suprapuneau pachetele si se bloca. 
+Datorita usleep(150), reusesc sa gestionez corect pachetele pe care le trimit, asteptand putin timp pana se 
+proceseaza(nu vreau sa risc sa mi se suprapuna pachetele si sa le pierd). 
+La Receiver, am creat receive_packet in connection. Acesta retine pachetele care ajung inainte de a ajunge pachetul
+cu nr de secventa asteptat. Astfel, voi astepta pana cand numarul de secventa creste si ajunge la nr de secventa din pachete.
+
+Pentru debug, am modificat in client.cpp IP-ul inet_aton("172.16.0.100", &addr) in inet_aton("adresa_mea", &addr).
+Am rulat intr-un terminal ./server si ./client checker/tests/nume_fisier. In Wireshark imi apareau pachetele care 
+erau trimise si la sfarsit, dupa ce se trimitea intregul fisier, imi afisa timpul de rulare. Totusi, rezultatele sunt
+inconsistente si nu inteleg de ce. 
