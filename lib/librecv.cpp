@@ -23,7 +23,7 @@ int listenfd;
 
 int recv_data(int conn_id, char *buffer, int len)
 {
-    int size = 0;
+    // int size = 0;
     // extragem conexiunea cu ID-ul conn_id
     struct connection *current_connection = cons[conn_id];
     // blochez mutex-ul pentru ulterioarele modificari ce vin asupra pachetului
@@ -139,8 +139,11 @@ void *receiver_handler(void *arg)
         resp.ack_num = htons((uint16_t) seq);
         resp.protocol_id = POLI_PROTOCOL_ID;
         resp.recv_window = htons(65535);
+        // pun tipul pachetului(de tip ACK)
         resp.type = 1;
+        // trimit pachetul
         sendto(current_connection->sockfd, &resp, sizeof(resp), 0, (struct sockaddr *)&current_connection->servaddr, sizeof(current_connection->servaddr));
+        // deblochez mutex-ul dupa modificari
         pthread_mutex_unlock(&cons[conn_id]->con_lock);
     }
     return NULL;
@@ -172,8 +175,11 @@ int wait4connect(uint32_t ip, uint16_t port)
     struct sockaddr_in client_addr;
     socklen_t clen = sizeof(client_addr);
     char raspuns[MAX_SEGMENT_SIZE];
+    // primul pas din Three Way Handshake
+    // Primesc pachetul SYN
     while (1) {
         int rc = recvfrom(listenfd, raspuns, sizeof(raspuns), 0, (struct sockaddr *)&client_addr, &clen);
+        // verific daca pachetul este de tip SYN
         if (rc > 0 && ((struct poli_tcp_ctrl_hdr *)raspuns)->type == 2) {
             break;
         }
@@ -188,7 +194,7 @@ int wait4connect(uint32_t ip, uint16_t port)
     
     // creez o structura de raspuns
     struct sockaddr_in resp;
-    // initializez campurile, deoarece caut pachetul I4V4, de tip 0, cu orice adresa
+    // initializez campurile ca sa avem orice IP si port.
     resp.sin_addr.s_addr = htonl(INADDR_ANY);
     resp.sin_family = AF_INET;
     resp.sin_port = 0;
@@ -199,6 +205,7 @@ int wait4connect(uint32_t ip, uint16_t port)
     socklen_t clen2 = sizeof(resp);
     getsockname(con->sockfd, (struct sockaddr *)&resp, &clen2);
 
+    // al doilea pas pentru Three Way Handshake este trimiterea pachetului de tipul SYN_ACK
     // creez o structura pentru raspuns
     struct poli_tcp_ctrl_hdr header;
     header.ack_num = resp.sin_port;
@@ -208,6 +215,21 @@ int wait4connect(uint32_t ip, uint16_t port)
     // trimit pachetul inapoi la client
     sendto(listenfd, &header, sizeof(header), 0, (struct sockaddr *)&client_addr, clen);
 
+    // al treilea pas pentru Three Way Handshake este primirea ACK-ului final
+    while (1) {
+        // creez o structura pe care sa primesc si aloc un buffer pentru raspuns
+        char resp[MAX_SEGMENT_SIZE];
+        struct sockaddr_in server_addr;
+        socklen_t clen3 = sizeof(server_addr);
+        int rc = recvfrom(con->sockfd, resp, sizeof(resp), 0, (struct sockaddr *)&server_addr, &clen);
+        if (rc >= (int)sizeof(struct poli_tcp_ctrl_hdr)) {
+            struct poli_tcp_ctrl_hdr *header_final = (struct poli_tcp_ctrl_hdr *)resp;
+            // verific daca tipul este de tip ACK si daca respecta protocolul
+            if (header_final->type == 1 && header_final->protocol_id == POLI_PROTOCOL_ID) {
+                break;
+            }
+        }
+    }
     // salvez clientul ca sa stiu cui trimit
     memcpy(&con->servaddr, &client_addr, sizeof(client_addr));
     con->expected_seq = 0;

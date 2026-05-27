@@ -72,8 +72,6 @@ int send_data(int conn_id, char *buffer, int len)
     int rc = sendto(current_connection->sockfd, send_packet.data(), send_packet.size(), 0, (struct sockaddr *)&current_connection->servaddr, sizeof(current_connection->servaddr));
     // deblochez mutex-ul dupa ce am terminat de modificat conexiunea curenta
     pthread_mutex_unlock(&current_connection->con_lock);
-    if (rc < 0)
-        return -1;
     // returnez lungimea datelor pe care am trimis-o
     return len;
 }
@@ -84,6 +82,8 @@ void *sender_handler(void *arg)
     char buf[MAX_SEGMENT_SIZE];
 
     while (1) {
+        // verific daca lista de conexiuni este goala
+        // daca este goala, nu are rost sa las sa ruleze degeaba si astept pana este adaugata o conexiune
         if (cons.size() == 0) {
             continue;
         }
@@ -100,7 +100,7 @@ void *sender_handler(void *arg)
                     if (!current_connection->sent_packet.empty()) {
                         auto idx2 = current_connection->sent_packet.begin();
                         // am implementat Go Back n - stiu ca era recomandat Selective Repeat, dar nu am reusit sa il fac sa ruleze corect
-                        // parcurg toate pachetele pe care nu le-am trimis
+                        // parcurg toate pachetele pentru care nu am primit ACK
                         while (idx2 != current_connection->sent_packet.end()) {
                             // extragem pachetul curent
                             const std::vector <char>& packet = idx2->second;
@@ -114,9 +114,6 @@ void *sender_handler(void *arg)
             }
         } while(res == -14);
 
-        if (res <= 0 || conn_id == -1) {
-            continue;
-        }
         auto idx = cons.find(conn_id);
         if (idx == cons.end()) {
             continue;
@@ -188,12 +185,16 @@ int setup_connection(uint32_t ip, uint16_t port)
     con->servaddr.sin_family = AF_INET;
     con->servaddr.sin_port = port;
 
+    // primul pas pentru Three Way Handshake(trimit SYN pe portul 8083)
     // creez un alt pachet pentru conexiune
     struct poli_tcp_ctrl_hdr header;
     header.protocol_id = POLI_PROTOCOL_ID;
+    // setez tipul pachetului la 1(de tip SYN)
     header.type = 2;
+    // trimit pachetul
     sendto(con->sockfd, &header, sizeof(header), 0, (struct sockaddr *)&con->servaddr, sizeof(con->servaddr));
 
+    // al doilea pas pentru Three Way Handshake(primesc SYN-ACK)
     // aloc o memorie pentur un nou buffer pentru pachetul pe care il voi primi
     char buff[MAX_SEGMENT_SIZE];
     struct sockaddr_in client_addr;
@@ -204,6 +205,17 @@ int setup_connection(uint32_t ip, uint16_t port)
         struct poli_tcp_ctrl_hdr *resp = (struct poli_tcp_ctrl_hdr *)buff;
         // salvam ce am primit, ca sa stim unde trimitem restul pachetelor
         con->servaddr.sin_port = resp->ack_num;
+        // al treilea pas pentru Three Way Handshake este trimiterea ACK-ului
+        // protocolul foloseste pachete de tip header, asa ca voi trimite ACK printr-un astfel de pachet
+        struct poli_tcp_ctrl_hdr header_final;
+        // pornesc cu ACK de la 0
+        header_final.ack_num = htons(0);
+        // pun protocolul specificat in tema
+        header_final.protocol_id = POLI_PROTOCOL_ID;
+        // pun tipul pachetului la 1(de tip ACK)
+        header_final.type = 1;
+        // trimit pachetul
+        sendto(con->sockfd, &header_final, sizeof(header_final), 0, (struct sockaddr *)&con->servaddr, sizeof(con->servaddr));
     }
     /* // This can be used to set a timer on a socket 
     struct timeval tv;
