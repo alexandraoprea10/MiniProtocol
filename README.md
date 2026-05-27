@@ -3,6 +3,8 @@ will implement a protocol over UDP that provides reliable transport.
 
 
 Etapa 1 - Protocol
+
+
 Am modificat structura connection. Am adaugat:
 Pentru Sender:
 a) base - retine numarul de secvente din primul pachet din fereastra glisanta. Il voi folosi la libsend 
@@ -17,6 +19,8 @@ sa fie trimise. Are aceeasi structura ca sent_packet.
 
 
 Etapa 2 - Conexiunea
+
+
 Am implementat Three Way Handshake. Din cerinta am inteles ca sunt 3 pasi: trimiterea ACK, primirea 
 SYN-ACK, trimiterea inapoi a ACK.
 Implementare Sender:
@@ -35,6 +39,8 @@ daca tipul este 1(adica daca este ACK). Daca nu este, atunci rulam while-ul.
 
 
 Etapa 3 - Trimiterea de pachete
+
+
 Cerinta sugereaza implementarea cu Selective Repeat, insa eu am facut cu Go Back n, retransmisand toate 
 pachetele daca unul este pierdut. 
 In libsend, iau o variabila globala care imi va contoriza nr de ferestre din fereastra glisanta. In send_data, 
@@ -47,6 +53,8 @@ In cazul in care pachetul cu indexul base nu are ACK, retransmit.
 
 
 Etapa 4 - API
+
+
 In receiver_handler verific ce fel de pachet soseste. Daca nu are dimensiune destula, nu il prelucreaza. 
 Altfel, il verifica. Daca pachetul are numarul de secventa egal cu numarul de secventa asteptat, adaug toate 
 datele in packet si maresc numarul de secventa asteptat. Daca pachetul are numarul de secventa mai mare decat 
@@ -58,13 +66,17 @@ asculta si maresc buffer-ul pe care trimit. In functia init_receiver initializez
 asociez cu portul dat de tema 8032. Cresc buffer-ul, chiar daca MAX_DATA_SIZE = 512. Fara aceasta marire, nu 
 imi trec testele. Am facut debug si problema era ca nu impartea bine fisierul. Imi ajungea inapoi jumatate de pachet.
 
-Cum am implementat UDP peste API sockets:
+Cum am implementat UDP peste API sockets
+
+
 La Sender, am ales sa declar un numar de ferestre implicit. Eu am ales 600. I-am pus numarul 600. Pentru 150, 
 implementarea era foarte lenta, iar pentru 1000 era prea mult, se suprapuneau pachetele si se bloca. 
 Datorita usleep(150), reusesc sa gestionez corect pachetele pe care le trimit, asteptand putin timp pana se 
 proceseaza(nu vreau sa risc sa mi se suprapuna pachetele si sa le pierd). 
 La Receiver, am creat receive_packet in connection. Acesta retine pachetele care ajung inainte de a ajunge pachetul
 cu nr de secventa asteptat. Astfel, voi astepta pana cand numarul de secventa creste si ajunge la nr de secventa din pachete.
+
+
 
 Pentru debug, am modificat in client.cpp IP-ul inet_aton("172.16.0.100", &addr) in inet_aton("adresa_mea", &addr).
 Am rulat intr-un terminal ./server si ./client checker/tests/nume_fisier. In Wireshark imi apareau pachetele care 
