@@ -31,13 +31,19 @@ struct connection {
                            have many more packets in our window */
 
     /* TODO. Parameters used only by the client */
+    // retin primul pachet din fereastra curenta
     int base;
+    // retin numarul de secventa urmator pe care il dau catre trimitere
     int next_to_send;
+    // retin tot ce am trimis pana acum
     std::map<int, std::vector<char>> sent_packet;
 
     // Trebuie sa facem si pentru receiver
+    // retin numarul de secvente asteptat de receiver
     int expected_seq;
+    // retin pachetele care au venit in ordinea corecta
     std::vector<char> packet;
+    // retin pachetele care inca nu sunt prelucrate, dar au venit(sunt inaintea lor cele cu nr de secventa asteptat)
     std::map<int, std::vector<char>> receive_packet;
 };
 
