@@ -16,6 +16,9 @@ Pentru receiver:
 d) packet - retine toate pachetele care au venit in ordinea corecta
 e) receive_packet - retine toate pachetele care au venit inainte de nr de secventa asteptat si urmeaza 
 sa fie trimise. Are aceeasi structura ca sent_packet.
+f) wait_data - o variabila ce respecta o conditie(am folosit-o la SO de multe ori). Daca nu primim niciun 
+pachet, atunci o blochez cu pthread_cond_wait. In receiver_handler o mai apelez odata, ca in cazul in care 
+recv_data "doarme", sa o "trezeasca" pentru a pune datele.
 
 
 Etapa 2 - Conexiunea
