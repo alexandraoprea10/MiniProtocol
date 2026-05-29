@@ -30,13 +30,13 @@ recv_data "doarme", sa o "trezeasca" pentru a pune datele.
 Etapa 2 - Conexiunea
 
 
-Am implementat Three Way Handshake. Din cerinta am inteles ca sunt 3 pasi: trimiterea ACK, primirea 
+Am implementat Three Way Handshake. Din cerinta am inteles ca sunt 3 pasi: trimiterea SYN, primirea 
 SYN-ACK, trimiterea inapoi a ACK.
 Implementare Sender:
 Imlementarea Three-Way-Handshake este facuta in functia setup_connection. Creez pachetul initial, pun ID-ul 
 corespunzator temei si tipul 2(pachetul fiind de tip SYN). Trimit pachetul pe portul 8032, oferit in cerinta 
 temei. Astept raspunsul de tip SYN-ACK, verificand daca ceea ce am primit are tipul 3. Salvez ACK-ul in structura 
-serverului. La sfarsit, creez un nou pachet de tip ACK, cu ack_num setat la 1.
+serverului. La sfarsit, creez un nou pachet de tip ACK, cu ack_num setat la 0.
 Il trimit cu sendto.
 Implementare Receiver:
 Implementarea Three-Way-Handshake este facuta in functia wait4connect. Creez o variabila globala care va fi 
@@ -52,11 +52,17 @@ Etapa 3 - Trimiterea de pachete
 
 Cerinta sugereaza implementarea cu Selective Repeat, insa eu am facut cu Go Back n, retransmisand toate 
 pachetele daca unul este pierdut. 
-In libsend, iau o variabila globala care imi va contoriza nr de ferestre din fereastra glisanta. In send_data, 
-verific daca trimit prea repede pachetele. Pe cazul de timeout, ma intorc la secventa base si tetransmit toate 
-pachetele de la base la next_to_send. Caut pachetul cu find. Daca primesc ACK, atunci sterg pachetele confirmate. 
+In libsend, iau o variabila globala care imi va contoriza nr de ferestre din fereastra glisanta. Pe cazul 
+de timeout, ma intorc la secventa base si tetransmit toate pachetele de la base la next_to_send. Caut 
+pachetul cu find. Daca primesc ACK, atunci sterg pachetele confirmate. 
 Verific sa nu trec de next_to_send ca sa nu creez pachete fara nimic in ele. Pachetul creat are valoarea 0 - 
 este de tip DATA.
+In librecv, am o implementare mai ciudata. Salvez pachetele doar cand nu sunt cele pe care le caut. Daca numarul 
+de secventa este mai mare decat numarul de secventa asteptat, atunci le adaug intr-un vector de pachete care urmeaza 
+a fi interceptate. Astept pana vine pachetul cu numarul de secventa pe care mi-l doresc eu.
+Am folosit si un vector global verify_connection, pe care il setez la 0 la inceputul oricarei conexiuni. Cand toate 
+pachetele din sent_packet au fost trimise, trimit un pachet de tipul 4 - FIN, care anunta ca am trimis tot si modific 
+valoarea verify_connection[conn_id] = 1, adica opresc conexiunea.
 
 
 Etapa 4 - API
@@ -68,7 +74,9 @@ datele in packet si maresc numarul de secventa asteptat. Daca pachetul are numar
 numarul de secventa asteptat, inseamna ca inaintea lui mai trebuie sa vina alte pachete. Astfel, il salvez 
 in receive_packet. Functia send_data parseaza fisierul de input in pachete de dimensiune alocata si le adauga
 in fereastra. Recv_data citeste datele primite. Mai intai, calculez cati bytes pot sa copiez, apoi pun datele 
-in buffer-ul din argumentele functiei.. In init_receiver initializez socket-ul pe care se 
+in buffer-ul din argumentele functiei.Cand primesc un pachet de tip FIN, inchid conexiunea la conexiunea cu ID-ul 
+conn_id si anunt pe toata lumea ca am facut aceasta modificare. Astfel, daca recv_data astepta, el iese din bucla s
+returneaza 0(pt ca s-a inchis conexiunea). In init_receiver initializez socket-ul pe care se 
 asculta si maresc buffer-ul pe care trimit. In functia init_receiver initializez socket-ul listenfd si il 
 asociez cu portul dat de tema 8032. 
 
@@ -76,8 +84,8 @@ Cum am implementat UDP peste API sockets
 
 
 La Sender, am ales sa declar un numar de ferestre implicit. Eu am ales 150. Pentru 150, pachetele se trimit destul de bine. 
-Am pus un timer de 40ms intre pachete, ca sa nu se suprapuna si sa nu se piarda. Inainte pusesem 600 de pachete, trecea doar 
-local, pe masina crapa, probabil facea overflow.
+Am pus un timer de 40ms intre ferestre, pentru retransmisie, ca sa nu se suprapuna si sa nu se piarda. 
+Inainte pusesem 600 de pachete, trecea doar local, pe masina crapa, probabil facea overflow.
 La Receiver, am creat receive_packet in connection. Acesta retine pachetele care ajung inainte de a ajunge pachetul
 cu nr de secventa asteptat. Astfel, voi astepta pana cand numarul de secventa creste si ajunge la nr de secventa din pachete.
 
