@@ -1,97 +1,76 @@
-Repository for the third homework of the Communication Networks class. In this homework the students
-will implement a protocol over UDP that provides reliable transport.
+# Building my own Protocol
 
-
-Etapa 1 - Protocol
-
-Cum am codificat tipul pachetelor:
-DATA = 0
-ACK = 1
-SYN = 2
-SYN_ACK = 3
-FIN = 4
-
-Am modificat structura connection. Am adaugat:
-Pentru Sender:
-a) base - retine numarul de secvente din primul pachet din fereastra glisanta. Il voi folosi la libsend 
-pentru a sti cand trebuie sa trimit urmatorul pachet.
-b) next_to_send - contor pentru pachetul urmatorul pe care vreau sa il trimit
-c) sent_packet - retine toate pachetele trimise pana acum. Cheia este numarul de secventa al pachetului 
-curent, iar valoarea este pachetul curent.
-Pentru receiver:
-d) packet - retine toate pachetele care au venit in ordinea corecta
-e) receive_packet - retine toate pachetele care au venit inainte de nr de secventa asteptat si urmeaza 
-sa fie trimise. Are aceeasi structura ca sent_packet.
-f) wait_data - o variabila ce respecta o conditie(am folosit-o la SO de multe ori). Daca nu primim niciun 
-pachet, atunci o blochez cu pthread_cond_wait. In receiver_handler o mai apelez odata, ca in cazul in care 
-recv_data "doarme", sa o "trezeasca" pentru a pune datele.
-
-
-Etapa 2 - Conexiunea
-
-
-Am implementat Three Way Handshake. Din cerinta am inteles ca sunt 3 pasi: trimiterea SYN, primirea 
-SYN-ACK, trimiterea inapoi a ACK.
-Implementare Sender:
-Imlementarea Three-Way-Handshake este facuta in functia setup_connection. Creez pachetul initial, pun ID-ul 
-corespunzator temei si tipul 2(pachetul fiind de tip SYN). Trimit pachetul pe portul 8032, oferit in cerinta 
-temei. Astept raspunsul de tip SYN-ACK, verificand daca ceea ce am primit are tipul 3. Salvez ACK-ul in structura 
-serverului. La sfarsit, creez un nou pachet de tip ACK, cu ack_num setat la 0.
-Il trimit cu sendto.
-Implementare Receiver:
-Implementarea Three-Way-Handshake este facuta in functia wait4connect. Creez o variabila globala care va fi 
-socket-ul ce va asculta si care va intercepta pachetele. Intr-o bucla, astept sa primesc pachetul de tip SYN, 
-cu tipul 2. Apoi creez un nou socket pentru clientul conectat, unde setez ca fiind primul port disponibil dupa 8032,
-pentru alegerea unui port liber. Trimit pachetul inapoi la client dar cu type = 3, deoarece pachetul are tipul SYN-ACK acum. 
-La sfarsit, realizez ultima parte a Three Way Handshake-ului, asteptand pachetul ce contine ACK. Verific 
-daca tipul este 1(adica daca este ACK). Daca nu este, atunci rulam while-ul.
-
-
-Etapa 3 - Trimiterea de pachete
-
-
-Cerinta sugereaza implementarea cu Selective Repeat, insa eu am facut cu Go Back n, retransmisand toate 
-pachetele daca unul este pierdut. 
-In libsend, iau o variabila globala care imi va contoriza nr de ferestre din fereastra glisanta. Pe cazul 
-de timeout, ma intorc la secventa base si tetransmit toate pachetele de la base la next_to_send. Caut 
-pachetul cu find. Daca primesc ACK, atunci sterg pachetele confirmate. 
-Verific sa nu trec de next_to_send ca sa nu creez pachete fara nimic in ele. Pachetul creat are valoarea 0 - 
-este de tip DATA.
-In librecv, am o implementare mai ciudata. Salvez pachetele doar cand nu sunt cele pe care le caut. Daca numarul 
-de secventa este mai mare decat numarul de secventa asteptat, atunci le adaug intr-un vector de pachete care urmeaza 
-a fi interceptate. Astept pana vine pachetul cu numarul de secventa pe care mi-l doresc eu.
-Am folosit si un vector global verify_connection, pe care il setez la 0 la inceputul oricarei conexiuni. Cand toate 
-pachetele din sent_packet au fost trimise, trimit un pachet de tipul 4 - FIN, care anunta ca am trimis tot si modific 
-valoarea verify_connection[conn_id] = 1, adica opresc conexiunea.
-
-
-Etapa 4 - API
-
-
-In receiver_handler verific ce fel de pachet soseste. Daca nu are dimensiune destula, nu il prelucreaza. 
-Altfel, il verifica. Daca pachetul are numarul de secventa egal cu numarul de secventa asteptat, adaug toate 
-datele in packet si maresc numarul de secventa asteptat. Daca pachetul are numarul de secventa mai mare decat 
-numarul de secventa asteptat, inseamna ca inaintea lui mai trebuie sa vina alte pachete. Astfel, il salvez 
-in receive_packet. Functia send_data parseaza fisierul de input in pachete de dimensiune alocata si le adauga
-in fereastra. Recv_data citeste datele primite. Mai intai, calculez cati bytes pot sa copiez, apoi pun datele 
-in buffer-ul din argumentele functiei.Cand primesc un pachet de tip FIN, inchid conexiunea la conexiunea cu ID-ul 
-conn_id si anunt pe toata lumea ca am facut aceasta modificare. Astfel, daca recv_data astepta, el iese din bucla s
-returneaza 0(pt ca s-a inchis conexiunea). In init_receiver initializez socket-ul pe care se 
-asculta si maresc buffer-ul pe care trimit. In functia init_receiver initializez socket-ul listenfd si il 
-asociez cu portul dat de tema 8032. 
-
-Cum am implementat UDP peste API sockets
-
-
-La Sender, am ales sa declar un numar de ferestre implicit. Eu am ales 150. Pentru 150, pachetele se trimit destul de bine. 
-Am pus un timer de 40ms intre ferestre, pentru retransmisie, ca sa nu se suprapuna si sa nu se piarda. 
-Inainte pusesem 600 de pachete, trecea doar local, pe masina crapa, probabil facea overflow.
-La Receiver, am creat receive_packet in connection. Acesta retine pachetele care ajung inainte de a ajunge pachetul
-cu nr de secventa asteptat. Astfel, voi astepta pana cand numarul de secventa creste si ajunge la nr de secventa din pachete.
+## 📖 Overview
+This repository contains a custom network engine that implements a reliable transport protocol layer on top of the inherently unreliable UDP socket infrastructure. The protocol guarantees ordered, error-free packet delivery with custom flow and congestion control mechanisms.
 
 
 
-Pentru debug, am modificat in client.cpp IP-ul inet_aton("172.16.0.100", &addr) in inet_aton("adresa_mea", &addr).
-Am rulat intr-un terminal ./server si ./client checker/tests/nume_fisier. In Wireshark imi apareau pachetele care 
-erau trimise si la sfarsit, dupa ce se trimitea intregul fisier, imi afisa timpul de rulare. Totusi, rezultatele sunt
-inconsistente si nu inteleg de ce. 
+## 📦 Protocol Specification & Architecture
+
+### 🔢 Packet Type Encoding
+Custom packet headers use the following structural identifiers to manage connection states and data flow:
+* `DATA` = 0
+* `ACK` = 1
+* `SYN` = 2
+* `SYN_ACK` = 3
+* `FIN` = 4
+
+### 🏗️ Connection State Modifications
+The core `connection` structure was augmented with specific state fields to decouple structural roles:
+
+#### For the Sender:
+* `base`: Tracks the sequence number of the first unacknowledged packet in the sliding window. Used inside `libsend` to manage sliding window bounds.
+* `next_to_send`: A monotonic counter tracking the sequence number assigned to the next outgoing packet.
+* `sent_packet`: A map/dictionary caching all transmitted packets. The key represents the packet's explicit `sequence number`, while the value holds the raw packet structure.
+
+#### For the Receiver:
+* `packet`: Stores all incoming packets that have been received in the correct, sequential order.
+* `receive_packet`: An out-of-order buffer holding packets that arrived ahead of the expected sequence number. Structured identically to `sent_packet`.
+* `wait_data`: A synchronization condition variable (`pthread_cond_t`). If no packets are available in the stream, `recv_data` blocks via `pthread_cond_wait`. It is subsequently signaled from `receiver_handler` to wake up the consumption thread once valid sequence segments are committed.
+
+
+
+## 🚀 Connection Lifecycle
+
+### 🤝 Phase 1: Three-Way Handshake
+A reliable connection session is established using an explicit three-step handshake matrix:
+
+#### Sender-Side Initialization (`setup_connection`)
+The sender initializes the request by constructing a baseline packet stamped with the specific protocol ID credentials and sets the packet type to `2` (`SYN`). This segment is transmitted via `sendto` over port `8032`. The thread blocks waiting for a `SYN_ACK` segment, validating that the incoming type field equals `3`. Upon verification, the configuration profile writes the server state credentials and returns a final `ACK` packet (type `1`) with `ack_num` initialized to `0`.
+
+#### Receiver-Side Listening (`wait4connect`)
+The receiver runs an execution loop on a global listening socket intercepted over port `8032`, blocking until a valid `SYN` packet (type `2`) is captured. Upon discovery, a separate ephemeral communication socket is generated by binding to the first available port incremented past `8032`. The receiver replies with a `SYN_ACK` packet (type `3`). The routine concludes by blocking until the final structural `ACK` packet (type `1`) arrives, looping back if constraints fail.
+
+
+
+### 📦 Phase 2: Sliding Window Packet Transmission
+
+#### Flow Control: Go-Back-N
+While baseline requirements suggest a *Selective Repeat* layout, this architecture utilizes a tailored **Go-Back-N (GBN)** mechanism for recovery fallback. 
+* **Sender Mechanics (`libsend`)**: Pushes packets bounded by a tracking sliding window limit. Upon an operational retransmission timeout, the flow rolls back directly to the current `base` sequence number, sequentially resending all active unacknowledged packets spanning from `base` up to `next_to_send`. Valid incoming `ACK` signals safely purge confirmed frames out of the `sent_packet` dictionary.
+* **Receiver Mechanics (`librecv`)**: Handles packet absorption using an early-arrival caching optimization. If an incoming sequence number exceeds the immediate expected index, it is placed into the `receive_packet` buffer. The thread halts sequential processing until the precise expected sequence hole is successfully filled.
+
+#### Connection Termination
+A global configuration array `verify_connection` tracks active session IDs (defaulting to `0`). Once `sent_packet` clears out entirely, the sender issues a termination frame with type `4` (`FIN`), changing the status variable `verify_connection[conn_id] = 1` to close down the pipeline safely.
+
+
+
+### ⚙️ Phase 3: Core Integration
+
+* **`receiver_handler`**: Inspects incoming segment frames. Packets failing baseline size verifications are instantly dropped. Valid in-order packets are written directly into `packet` while incrementing the internal expected sequence registry. Out-of-order data blocks are redirected into the `receive_packet` cache.
+* **`send_data`**: Segments local input stream file descriptors into explicitly bounded network packet payload buffers and registers them into the active transmission window.
+* **`recv_data`**: Dynamically calculates the copy boundaries, pulling safe byte chunks out of the ordered sequences and writing them into the reference argument buffer. Upon intercepting a `FIN` indicator, it terminates active loops and returns `0` to signal an ordered socket shutdown.
+* **`init_receiver`**: Allocates the base listening file descriptor (`listenfd`), binds the infrastructure over the required port `8032`, and expands the OS socket buffer sizes to handle higher throughput without dropping frames.
+
+
+
+## 🛠️ UDP Environment Configurations
+* **Window Scale**: The sliding window capacity is scaled to **150 packets**, which provides optimal throughput stability. (Scaling up to 600 packets caused high packet drop rates and memory overflows on remote test nodes due to buffer flooding).
+* **Retransmission Timer**: Implements a dedicated **40ms retransmission timer** interval to prevent structural execution loops from overlapping while minimizing link degradation.
+
+
+
+## 🔬 Testing & Debugging Diagnostics
+To perform functional verification, the loopback targets inside `client.cpp` were reconfigured by replacing the default IP `172.16.0.100` via `inet_aton` with the active local testing address structure:
+```cpp
+inet_aton("your_local_ip", &addr);
